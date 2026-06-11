@@ -1,0 +1,4 @@
+
+# Testing and quality
+pytest==8.1.1
+
