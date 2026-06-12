@@ -166,7 +166,7 @@ resource "aws_glue_catalog_table" "customer_sentiment_by_age" {
   }
 
   storage_descriptor {
-    location      = "s3://${local.data_product_bucket_name}/${var.customer_sentiment_db_name}/customer_sentiment_by_age/"
+    location      = "s3://${local.data_product_bucket_name}/customer_sentiment_by_age/"
     input_format  = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
     output_format = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
 

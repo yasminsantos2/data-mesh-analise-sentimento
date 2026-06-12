@@ -56,3 +56,19 @@ module "lake_formation" {
   data_product_bucket_arn = module.s3.data_product_bucket_arn
   tags                    = local.common_tags
 }
+
+module "glue" {
+  source = "../../modules/glue"
+
+  project_name               = var.project_name
+  environment                = var.environment
+  glue_role_arn              = module.iam.glue_role_arn
+  raw_bucket_id              = module.s3.bucket_ids["raw"]
+  trusted_bucket_id          = module.s3.bucket_ids["trusted"]
+  data_product_bucket_id     = module.s3.bucket_ids["data-product"]
+  trusted_bucket_arn         = module.s3.trusted_bucket_arn
+  data_product_bucket_arn    = module.s3.data_product_bucket_arn
+  customer_sentiment_db_name = module.lake_formation.customer_sentiment_database
+  scripts_source_dir         = "${path.module}/../../../glue_jobs"
+  tags                       = local.common_tags
+}

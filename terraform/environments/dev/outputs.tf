@@ -40,3 +40,21 @@ output "lake_formation_registered_locations" {
   description = "S3 locations registered with Lake Formation."
   value       = module.lake_formation.registered_locations
 }
+
+output "glue_jobs" {
+  description = "Provisioned Glue jobs."
+  value = {
+    job_clean = module.glue.job_clean_name
+    job_agg   = module.glue.job_agg_name
+  }
+}
+
+output "glue_crawler" {
+  description = "Provisioned Glue crawler."
+  value       = module.glue.crawler_name
+}
+
+output "glue_script_locations" {
+  description = "S3 URIs of the uploaded Glue scripts."
+  value       = module.glue.script_locations
+}
