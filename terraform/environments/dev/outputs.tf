@@ -22,3 +22,21 @@ output "athena_role_arn" {
   description = "ARN of the Athena role."
   value       = module.iam.athena_role_arn
 }
+
+output "lake_formation_databases" {
+  description = "Glue databases managed by Lake Formation."
+  value = {
+    reviews_trusted    = module.lake_formation.reviews_trusted_database
+    customer_sentiment = module.lake_formation.customer_sentiment_database
+  }
+}
+
+output "customer_sentiment_table" {
+  description = "Fully qualified name of the data-product table."
+  value       = module.lake_formation.customer_sentiment_table
+}
+
+output "lake_formation_registered_locations" {
+  description = "S3 locations registered with Lake Formation."
+  value       = module.lake_formation.registered_locations
+}

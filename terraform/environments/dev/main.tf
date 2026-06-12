@@ -46,3 +46,13 @@ module "iam" {
   athena_results_prefix   = var.athena_results_prefix
   tags                    = local.common_tags
 }
+
+module "lake_formation" {
+  source = "../../modules/lake_formation"
+
+  glue_role_arn           = module.iam.glue_role_arn
+  athena_role_arn         = module.iam.athena_role_arn
+  trusted_bucket_arn      = module.s3.trusted_bucket_arn
+  data_product_bucket_arn = module.s3.data_product_bucket_arn
+  tags                    = local.common_tags
+}
