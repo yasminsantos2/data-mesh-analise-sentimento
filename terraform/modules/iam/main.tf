@@ -193,6 +193,15 @@ data "aws_iam_policy_document" "athena" {
     resources = ["*"]
   }
 
+  # Required so Athena can read data managed by Lake Formation. Lake Formation
+  # still gates which databases/tables are accessible via its own permissions.
+  statement {
+    sid       = "LakeFormationDataAccess"
+    effect    = "Allow"
+    actions   = ["lakeformation:GetDataAccess"]
+    resources = ["*"]
+  }
+
   # List the data-product bucket and read its objects.
   statement {
     sid       = "ReadDataProduct"

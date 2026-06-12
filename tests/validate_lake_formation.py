@@ -12,8 +12,10 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REGION = "us-east-1"
@@ -46,6 +48,50 @@ def aws_json(args: list[str]) -> dict:
 def role_arn(name_key: str) -> str:
     out = json.loads(run(["terraform", "output", "-json"], cwd=DEV_DIR).stdout)
     return out[name_key]["value"]
+
+
+def tf_value(key: str):
+    out = json.loads(run(["terraform", "output", "-json"], cwd=DEV_DIR).stdout)
+    return out[key]["value"]
+
+
+def assume_role(arn: str) -> dict:
+    """Assume a role and return its temporary credentials as env vars."""
+    out = aws_json([
+        "sts", "assume-role",
+        "--role-arn", arn,
+        "--role-session-name", "s1-02-validate",
+    ])
+    c = out["Credentials"]
+    return {
+        "AWS_ACCESS_KEY_ID": c["AccessKeyId"],
+        "AWS_SECRET_ACCESS_KEY": c["SecretAccessKey"],
+        "AWS_SESSION_TOKEN": c["SessionToken"],
+    }
+
+
+def run_as(creds: dict, args: list[str]) -> subprocess.CompletedProcess:
+    """Run an AWS CLI command using the supplied temporary credentials."""
+    env = dict(os.environ)
+    env.update(creds)
+    return subprocess.run(
+        ["aws", *args, "--region", REGION, "--output", "json"],
+        capture_output=True, text=True, env=env,
+    )
+
+
+def poll_athena(creds: dict, qid: str, timeout: int = 90) -> tuple[str, str]:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = run_as(creds, ["athena", "get-query-execution", "--query-execution-id", qid])
+        if r.returncode != 0:
+            return "ERROR", r.stderr.strip()[-200:]
+        status = json.loads(r.stdout)["QueryExecution"]["Status"]
+        state = status["State"]
+        if state in ("SUCCEEDED", "FAILED", "CANCELLED"):
+            return state, status.get("StateChangeReason", "")
+        time.sleep(3)
+    return "TIMEOUT", ""
 
 
 # ---------------------------------------------------------------------------
@@ -105,22 +151,48 @@ def perms_for_principal(principal: str, db: str) -> list[str]:
     return perms
 
 
-def check_athena_grants() -> None:
+def check_athena_behavioral() -> None:
+    """Behavioral test: assume athena_role and exercise real access."""
     athena = role_arn("athena_role_arn")
-
     try:
-        cust = perms_for_principal(athena, CUSTOMER_DB)
-        record("athena_role SELECT em customer_sentiment", "SELECT" in cust,
-               f"permissions={cust}")
+        creds = assume_role(athena)
     except Exception as exc:  # noqa: BLE001
-        record("athena_role SELECT em customer_sentiment", False, str(exc))
+        record("Assumir athena_role", False, str(exc))
+        return
+    record("Assumir athena_role", True, "ok")
 
+    # SELECT OK em customer_sentiment: roda uma query Athena REAL.
+    dp_bucket = tf_value("bucket_ids")["data-product"]
+    output = f"s3://{dp_bucket}/athena-results/"
+    sql = 'SELECT count(*) AS n FROM "customer_sentiment"."customer_sentiment_by_age"'
     try:
-        rev = perms_for_principal(athena, REVIEWS_DB)
-        record("athena_role DENIED em reviews_trusted (sem grants)", len(rev) == 0,
-               "nenhuma permissao" if not rev else f"permissions={rev}")
+        start = run_as(creds, [
+            "athena", "start-query-execution",
+            "--query-string", sql,
+            "--query-execution-context", "Database=customer_sentiment",
+            "--result-configuration", f"OutputLocation={output}",
+            "--work-group", "primary",
+        ])
+        if start.returncode != 0:
+            record("athena_role SELECT OK em customer_sentiment (query real)",
+                   False, start.stderr.strip()[-300:])
+        else:
+            qid = json.loads(start.stdout)["QueryExecutionId"]
+            state, reason = poll_athena(creds, qid)
+            record("athena_role SELECT OK em customer_sentiment (query real)",
+                   state == "SUCCEEDED", f"state={state} {reason}".strip())
     except Exception as exc:  # noqa: BLE001
-        record("athena_role DENIED em reviews_trusted (sem grants)", False, str(exc))
+        record("athena_role SELECT OK em customer_sentiment (query real)", False, str(exc))
+
+    # AccessDeniedException em reviews_trusted: GetDatabase exige a permissao
+    # DESCRIBE no Lake Formation. Como athena_role nao tem grant em
+    # reviews_trusted (e IAMAllowedPrincipals foi revogado), o LF nega.
+    # (get-tables nao serve: o LF filtra o resultado silenciosamente.)
+    denied = run_as(creds, ["glue", "get-database", "--name", REVIEWS_DB])
+    combined = (denied.stderr or "") + (denied.stdout or "")
+    is_denied = denied.returncode != 0 and "AccessDenied" in combined
+    record("athena_role AccessDeniedException em reviews_trusted", is_denied,
+           "AccessDeniedException" if is_denied else f"rc={denied.returncode} {combined.strip()[-200:]}")
 
 
 # ---------------------------------------------------------------------------
@@ -191,13 +263,19 @@ def check_table() -> None:
 # 7. terraform apply idempotent (no changes on a fresh plan)
 # ---------------------------------------------------------------------------
 def check_idempotent() -> None:
-    plan = run(["terraform", "plan", "-input=false", "-lock=false", "-detailed-exitcode"], cwd=DEV_DIR)
+    # Scoped to the lake_formation module: the global plan would also show the
+    # Glue jobs/crawler that AWS is currently blocking at the account level,
+    # which is unrelated to S1-02 drift.
+    plan = run([
+        "terraform", "plan", "-input=false", "-lock=false",
+        "-detailed-exitcode", "-target=module.lake_formation",
+    ], cwd=DEV_DIR)
     if plan.returncode == 0:
-        record("terraform apply idempotente (sem changes)", True, "0 changes")
+        record("terraform apply idempotente (lake_formation sem changes)", True, "0 changes")
     elif plan.returncode == 2:
-        record("terraform apply idempotente (sem changes)", False, "mudancas pendentes (drift)")
+        record("terraform apply idempotente (lake_formation sem changes)", False, "mudancas pendentes (drift)")
     else:
-        record("terraform apply idempotente (sem changes)", False, plan.stderr.strip()[-300:])
+        record("terraform apply idempotente (lake_formation sem changes)", False, plan.stderr.strip()[-300:])
 
 
 def main() -> int:
@@ -205,7 +283,7 @@ def main() -> int:
 
     check_databases()
     check_iam_allowed_revoked()
-    check_athena_grants()
+    check_athena_behavioral()
     check_glue_grants()
     check_table()
     check_idempotent()
