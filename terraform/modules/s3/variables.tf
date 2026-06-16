@@ -14,6 +14,12 @@ variable "bucket_layers" {
   default     = ["raw", "trusted", "data-product"]
 }
 
+variable "bucket_suffix" {
+  description = "Optional suffix appended to bucket names for global uniqueness (e.g. the AWS account ID). Empty = no suffix."
+  type        = string
+  default     = ""
+}
+
 variable "glacier_transition_days" {
   description = "Number of days after which current object versions transition to Glacier."
   type        = number

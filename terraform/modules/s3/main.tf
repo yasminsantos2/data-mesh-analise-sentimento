@@ -1,9 +1,12 @@
 locals {
-  # Bucket names must be globally unique, so we prefix each layer with the
-  # project name and environment, e.g. "data-mesh-sentimento-dev-raw".
+  # Bucket names must be globally unique across ALL AWS accounts. An optional
+  # suffix (typically the AWS account ID) is appended so the same project can
+  # be deployed to multiple accounts without name collisions.
+  # e.g. "data-mesh-sentimento-dev-raw-082846230365".
+  name_suffix = var.bucket_suffix != "" ? "-${var.bucket_suffix}" : ""
   bucket_names = {
     for layer in var.bucket_layers :
-    layer => "${var.project_name}-${var.environment}-${layer}"
+    layer => "${var.project_name}-${var.environment}-${layer}${local.name_suffix}"
   }
 }
 

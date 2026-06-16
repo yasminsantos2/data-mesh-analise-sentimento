@@ -1,4 +1,6 @@
+# Data processing / local validation of the Glue pipelines (tests/validate_s1_03.py)
+pandas==2.3.3
+pyarrow==24.0.0
 
 # Testing and quality
 pytest==8.1.1
-

@@ -17,6 +17,8 @@ provider "aws" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
   common_tags = merge(var.tags, {
     Project     = var.project_name
@@ -30,6 +32,7 @@ module "s3" {
 
   project_name            = var.project_name
   environment             = var.environment
+  bucket_suffix           = data.aws_caller_identity.current.account_id
   glacier_transition_days = var.glacier_transition_days
   force_destroy           = var.force_destroy
   tags                    = local.common_tags
@@ -71,4 +74,8 @@ module "glue" {
   customer_sentiment_db_name = module.lake_formation.customer_sentiment_database
   scripts_source_dir         = "${path.module}/../../../glue_jobs"
   tags                       = local.common_tags
+
+  # The crawler's Lake Formation grants (DATA_LOCATION_ACCESS / database) require
+  # the data-product location to be registered first by the lake_formation module.
+  depends_on = [module.lake_formation]
 }

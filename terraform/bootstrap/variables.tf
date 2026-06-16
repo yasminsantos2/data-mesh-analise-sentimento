@@ -13,7 +13,7 @@ variable "project_name" {
 variable "state_bucket_name" {
   description = "Globally-unique name of the S3 bucket that stores Terraform state."
   type        = string
-  default     = "data-mesh-sentimento-tfstate"
+  default     = "data-mesh-sentimento-tfstate-082846230365"
 }
 
 variable "lock_table_name" {
