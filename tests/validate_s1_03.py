@@ -97,10 +97,10 @@ def run_job_agg(trusted_dir: Path, out_dir: Path, dt: str) -> pd.DataFrame:
     agg["review_count"] = agg["review_count"].astype("int32")
     agg["avg_rating"] = agg["avg_rating"].astype(float).round(2)
     agg["dt"] = dt
-    agg = agg[AGG_COLUMNS]
     out_dir.mkdir(parents=True, exist_ok=True)
-    agg.to_parquet(out_dir / "part-0000.parquet", index=False)
-    return agg
+    # Match Glue job: dt lives in the partition path, not inside the Parquet file.
+    agg.drop(columns=["dt"]).to_parquet(out_dir / "part-0000.parquet", index=False)
+    return agg[AGG_COLUMNS]
 
 
 def check_data_pipeline() -> None:

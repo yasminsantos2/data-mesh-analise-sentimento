@@ -79,3 +79,25 @@ module "glue" {
   # the data-product location to be registered first by the lake_formation module.
   depends_on = [module.lake_formation]
 }
+
+module "step_functions" {
+  source = "../../modules/step_functions"
+
+  project_name            = var.project_name
+  environment             = var.environment
+  sfn_role_arn            = module.iam.sfn_role_arn
+  sfn_role_name           = module.iam.sfn_role_name
+  job_clean_name          = module.glue.job_clean_name
+  job_agg_name            = module.glue.job_agg_name
+  crawler_name            = module.glue.crawler_name
+  raw_bucket_id           = module.s3.bucket_ids["raw"]
+  raw_bucket_arn          = module.s3.raw_bucket_arn
+  trusted_bucket_id       = module.s3.bucket_ids["trusted"]
+  data_product_bucket_id  = module.s3.bucket_ids["data-product"]
+  data_product_bucket_arn = module.s3.data_product_bucket_arn
+  athena_results_prefix   = var.athena_results_prefix
+  definition_source_path  = "${path.module}/../../../step_functions/state_machine.asl.json"
+  tags                    = local.common_tags
+
+  depends_on = [module.glue, module.iam]
+}

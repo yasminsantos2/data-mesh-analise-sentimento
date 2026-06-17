@@ -261,7 +261,9 @@ resource "aws_glue_crawler" "data_product" {
   # delete_behavior LOG => never deletes tables (DELETE_FROM_DATABASE = false).
   schema_change_policy {
     delete_behavior = "LOG"
-    update_behavior = "UPDATE_IN_DATABASE"
+    # LOG prevents the crawler from mutating column definitions on a table that
+    # is already managed by Terraform (avoids duplicate dt partition/column).
+    update_behavior = "LOG"
   }
 
   tags = var.tags

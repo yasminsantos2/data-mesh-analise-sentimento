@@ -48,16 +48,18 @@ agg = (
         count(lit(1)).cast("int").alias("review_count"),
         spark_round(avg(col("rating").cast("double")), 2).alias("avg_rating"),
     )
-    .withColumn("dt", lit(dt))
     .select(
         "age_band",
         "department_name",
         "sentiment",
         "review_count",
         "avg_rating",
-        "dt",
     )
 )
+
+# dt is a Hive partition key (path dt=YYYY-MM-DD/), not a physical Parquet
+# column. Writing dt inside the file makes the crawler duplicate it in the Glue
+# catalog alongside the partition key, breaking Athena queries.
 
 # Overwrite makes reprocessing the same dt idempotent.
 agg.write.mode("overwrite").parquet(output_path)

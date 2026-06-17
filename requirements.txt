@@ -2,5 +2,9 @@
 pandas==2.3.3
 pyarrow==24.0.0
 
+# Ingestion script (scripts/upload_partitions.py)
+boto3==1.35.49
+tqdm==4.67.1
+
 # Testing and quality
 pytest==8.1.1

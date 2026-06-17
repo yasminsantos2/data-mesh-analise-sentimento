@@ -1,0 +1,173 @@
+{
+  "Comment": "Orquestra o pipeline de sentimento: valida particao raw, job_clean, job_agg e crawler.",
+  "StartAt": "CountRawPartition",
+  "States": {
+    "CountRawPartition": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString.$": "States.Format('SELECT count(*) AS cnt FROM ${raw_database}.${raw_table} WHERE dt = \\'{}\\'', $.dt)",
+        "QueryExecutionContext": {
+          "Database": "${raw_database}"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "${athena_output_location}"
+        },
+        "WorkGroup": "primary"
+      },
+      "ResultPath": "$.athenaExecution",
+      "Next": "GetPartitionCount"
+    },
+    "GetPartitionCount": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:getQueryResults",
+      "Parameters": {
+        "QueryExecutionId.$": "$.athenaExecution.QueryExecution.QueryExecutionId"
+      },
+      "ResultPath": "$.countResult",
+      "Next": "CheckPartitionCount"
+    },
+    "CheckPartitionCount": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.countResult.ResultSet.Rows[1].Data[0].VarCharValue",
+          "StringEquals": "0",
+          "Next": "EmptyPartition"
+        }
+      ],
+      "Default": "RunJobClean"
+    },
+    "EmptyPartition": {
+      "Type": "Fail",
+      "Error": "EmptyPartition",
+      "Cause": "COUNT=0 for the requested dt partition in the raw layer."
+    },
+    "RunJobClean": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "${job_clean_name}",
+        "Arguments": {
+          "--dt.$": "$.dt",
+          "--bucket_raw": "${raw_bucket}",
+          "--bucket_trusted": "${trusted_bucket}"
+        }
+      },
+      "ResultPath": "$.jobCleanResult",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Glue.ConcurrentRunsExceededException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "JobCleanFailed"
+        }
+      ],
+      "Next": "RunJobAgg"
+    },
+    "JobCleanFailed": {
+      "Type": "Fail",
+      "Error": "JobCleanFailed",
+      "Cause": "job_clean did not complete successfully after retries."
+    },
+    "RunJobAgg": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "${job_agg_name}",
+        "Arguments": {
+          "--dt.$": "$.dt",
+          "--bucket_trusted": "${trusted_bucket}",
+          "--bucket_product": "${data_product_bucket}"
+        }
+      },
+      "ResultPath": "$.jobAggResult",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Glue.ConcurrentRunsExceededException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "JobAggFailed"
+        }
+      ],
+      "Next": "StartCrawler"
+    },
+    "JobAggFailed": {
+      "Type": "Fail",
+      "Error": "JobAggFailed",
+      "Cause": "job_agg did not complete successfully after retries."
+    },
+    "StartCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "${crawler_name}"
+      },
+      "ResultPath": null,
+      "Next": "WaitForCrawler"
+    },
+    "WaitForCrawler": {
+      "Type": "Wait",
+      "Seconds": 10,
+      "Next": "GetCrawlerStatus"
+    },
+    "GetCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "${crawler_name}"
+      },
+      "ResultPath": "$.crawlerStatus",
+      "Next": "CrawlerReady"
+    },
+    "CrawlerReady": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "READY",
+          "Next": "Success"
+        },
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "RUNNING",
+          "Next": "WaitForCrawler"
+        },
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "STOPPING",
+          "Next": "WaitForCrawler"
+        }
+      ],
+      "Default": "CrawlerFailed"
+    },
+    "CrawlerFailed": {
+      "Type": "Fail",
+      "Error": "CrawlerFailed",
+      "Cause": "Crawler did not reach READY state."
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  }
+}

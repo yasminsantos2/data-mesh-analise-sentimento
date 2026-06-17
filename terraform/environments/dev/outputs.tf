@@ -58,3 +58,18 @@ output "glue_script_locations" {
   description = "S3 URIs of the uploaded Glue scripts."
   value       = module.glue.script_locations
 }
+
+output "state_machine_arn" {
+  description = "ARN of the sentiment pipeline Step Functions state machine."
+  value       = module.step_functions.state_machine_arn
+}
+
+output "state_machine_name" {
+  description = "Name of the sentiment pipeline Step Functions state machine."
+  value       = module.step_functions.state_machine_name
+}
+
+output "state_machine_log_group" {
+  description = "CloudWatch log group for Step Functions pipeline executions."
+  value       = module.step_functions.log_group_name
+}
