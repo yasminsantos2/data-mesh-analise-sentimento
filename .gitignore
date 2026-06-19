@@ -20,6 +20,9 @@ terraform.rc
 # ---- Data ----
 data/
 
+# ---- Simulation logs ----
+logs/
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
