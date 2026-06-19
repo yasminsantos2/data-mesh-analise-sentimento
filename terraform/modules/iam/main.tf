@@ -2,11 +2,6 @@ data "aws_caller_identity" "current" {}
 
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
-
-  # Athena query results location (a dedicated prefix inside the data-product
-  # bucket). Keeping it to a prefix means the data lake stays at exactly three
-  # buckets while query results live in their own isolated path.
-  athena_results_arn = "${var.data_product_bucket_arn}/${var.athena_results_prefix}/*"
 }
 
 # ---------------------------------------------------------------------------
@@ -140,8 +135,8 @@ resource "aws_iam_role_policy" "sfn" {
 
 # ---------------------------------------------------------------------------
 # Athena role
-#   - READ  on the data-product bucket
-#   - WRITE on the Athena results prefix (inside data-product)
+#   - READ on the data-product bucket (Lake Formation gates table access)
+#   - Athena workgroup + results bucket permissions are attached by the athena module
 # ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "athena_assume" {
   statement {
@@ -163,21 +158,6 @@ resource "aws_iam_role" "athena" {
 }
 
 data "aws_iam_policy_document" "athena" {
-  # Athena query execution APIs.
-  statement {
-    sid    = "AthenaQueries"
-    effect = "Allow"
-    actions = [
-      "athena:StartQueryExecution",
-      "athena:StopQueryExecution",
-      "athena:GetQueryExecution",
-      "athena:GetQueryResults",
-      "athena:GetWorkGroup",
-      "athena:ListQueryExecutions",
-    ]
-    resources = ["*"]
-  }
-
   # Read-only Glue Data Catalog access used by Athena to resolve tables.
   statement {
     sid    = "GlueCatalogRead"
@@ -215,14 +195,6 @@ data "aws_iam_policy_document" "athena" {
     effect    = "Allow"
     actions   = ["s3:GetObject"]
     resources = ["${var.data_product_bucket_arn}/*"]
-  }
-
-  # Write query results to the dedicated Athena results prefix.
-  statement {
-    sid       = "WriteAthenaResults"
-    effect    = "Allow"
-    actions   = ["s3:PutObject", "s3:GetObject"]
-    resources = [local.athena_results_arn]
   }
 }
 

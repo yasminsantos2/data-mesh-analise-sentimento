@@ -78,3 +78,18 @@ output "pipeline_input_example" {
   description = "Example input for the sentiment pipeline state machine."
   value       = module.step_functions.default_pipeline_input
 }
+
+output "athena_workgroup_name" {
+  description = "Marketing Athena workgroup."
+  value       = module.athena.workgroup_name
+}
+
+output "athena_results_location" {
+  description = "S3 URI where marketing_wg writes query results."
+  value       = module.athena.results_location
+}
+
+output "athena_named_queries" {
+  description = "Map of analytical view name => Athena named query ID."
+  value       = module.athena.named_queries
+}

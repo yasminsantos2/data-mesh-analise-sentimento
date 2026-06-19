@@ -161,17 +161,15 @@ def check_athena_behavioral() -> None:
         return
     record("Assumir athena_role", True, "ok")
 
-    # SELECT OK em customer_sentiment: roda uma query Athena REAL.
-    dp_bucket = tf_value("bucket_ids")["data-product"]
-    output = f"s3://{dp_bucket}/athena-results/"
+    # SELECT OK em customer_sentiment: roda uma query Athena REAL no marketing_wg.
+    workgroup = tf_value("athena_workgroup_name")
     sql = 'SELECT count(*) AS n FROM "customer_sentiment"."customer_sentiment_by_age"'
     try:
         start = run_as(creds, [
             "athena", "start-query-execution",
             "--query-string", sql,
             "--query-execution-context", "Database=customer_sentiment",
-            "--result-configuration", f"OutputLocation={output}",
-            "--work-group", "primary",
+            "--work-group", workgroup,
         ])
         if start.returncode != 0:
             record("athena_role SELECT OK em customer_sentiment (query real)",

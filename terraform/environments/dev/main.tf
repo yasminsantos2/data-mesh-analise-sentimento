@@ -100,3 +100,17 @@ module "step_functions" {
 
   depends_on = [module.glue, module.iam, module.lake_formation]
 }
+
+module "athena" {
+  source = "../../modules/athena"
+
+  project_name                = var.project_name
+  environment                 = var.environment
+  bucket_suffix               = data.aws_caller_identity.current.account_id
+  athena_role_name            = module.iam.athena_role_name
+  customer_sentiment_database = module.lake_formation.customer_sentiment_database
+  force_destroy               = var.force_destroy
+  tags                        = local.common_tags
+
+  depends_on = [module.iam, module.lake_formation]
+}
