@@ -16,7 +16,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEV_DIR = REPO_ROOT / "terraform" / "environments" / "dev"
-ASL_PATH = REPO_ROOT / "step_functions" / "state_machine.asl.json"
+ASL_PATH = REPO_ROOT / "terraform" / "modules" / "step_functions" / "state_machine.asl.json"
 REGION = "us-east-1"
 
 results: list[tuple[str, bool, str]] = []
@@ -46,11 +46,12 @@ def check_asl_definition() -> None:
     asl = json.loads(ASL_PATH.read_text(encoding="utf-8"))
     states = asl.get("States", {})
 
-    # Input dt flows through Glue job Arguments (--dt.$": "$.dt")
-    clean = states.get("RunJobClean", {})
-    agg = states.get("RunJobAgg", {})
-    dt_in_clean = clean.get("Parameters", {}).get("Arguments", {}).get("--dt.$") == "$.dt"
-    dt_in_agg = agg.get("Parameters", {}).get("Arguments", {}).get("--dt.$") == "$.dt"
+    clean = states.get("StartJobClean", states.get("RunJobClean", {}))
+    agg = states.get("StartJobAgg", states.get("RunJobAgg", {}))
+    args_clean = clean.get("Parameters", {}).get("Arguments", {})
+    args_agg = agg.get("Parameters", {}).get("Arguments", {})
+    dt_in_clean = args_clean.get("--dt.$") == "$.dt"
+    dt_in_agg = args_agg.get("--dt.$") == "$.dt"
     record(
         "Input aceita parametro dt (YYYY-MM-DD)",
         dt_in_clean and dt_in_agg,
@@ -71,20 +72,25 @@ def check_asl_definition() -> None:
         f"clean={clean_retry}, agg={agg_retry}",
     )
 
-    # Crawler only after job_agg (sequential Next chain)
-    agg_next = agg.get("Next") == "StartCrawler"
+    # Crawler only after job_agg SUCCEEDED
+    check_agg = states.get("CheckJobAgg", {})
+    agg_choices = check_agg.get("Choices", [])
+    crawler_after_agg = any(
+        c.get("StringEquals") == "SUCCEEDED" and c.get("Next") == "StartCrawler"
+        for c in agg_choices
+    )
     record(
         "Crawler so inicia apos job_agg concluir",
-        agg_next,
-        f"RunJobAgg.Next={agg.get('Next')}",
+        crawler_after_agg,
+        f"CheckJobAgg choices={agg_choices}",
     )
 
-    # EmptyPartition fail state
+    # EmptyPartition fail state (validacao Athena no final)
     empty = states.get("EmptyPartition", {})
     empty_ok = empty.get("Type") == "Fail" and empty.get("Error") == "EmptyPartition"
     record(
         "Pipeline falha com erro EmptyPartition se COUNT=0 no Athena",
-        empty_ok and "CountRawPartition" in states,
+        empty_ok and "AthenaValidation" in states,
         f"Error={empty.get('Error')}",
     )
 
@@ -99,7 +105,6 @@ def check_terraform_provisioned() -> None:
     required = [
         "module.step_functions.aws_sfn_state_machine.pipeline",
         "module.step_functions.aws_cloudwatch_log_group.sfn",
-        "module.step_functions.aws_glue_catalog_table.reviews",
     ]
     missing = [r for r in required if r not in resources]
     record(

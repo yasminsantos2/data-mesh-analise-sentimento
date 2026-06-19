@@ -3,141 +3,53 @@ locals {
   state_machine_name     = "${local.name_prefix}-sentiment-pipeline"
   athena_output_location = "s3://${var.data_product_bucket_id}/${var.athena_results_prefix}/"
   athena_results_arn     = "${var.data_product_bucket_arn}/${var.athena_results_prefix}/*"
-  raw_reviews_location   = "s3://${var.raw_bucket_id}/reviews/"
   log_group_name         = "/aws/vendedlogs/states/${local.state_machine_name}"
 
-  definition = templatefile(var.definition_source_path, {
-    job_clean_name         = var.job_clean_name
-    job_agg_name           = var.job_agg_name
-    crawler_name           = var.crawler_name
-    raw_bucket             = var.raw_bucket_id
-    trusted_bucket         = var.trusted_bucket_id
-    data_product_bucket    = var.data_product_bucket_id
-    raw_database           = var.raw_database_name
-    raw_table              = var.raw_table_name
-    athena_output_location = local.athena_output_location
+  definition = templatefile("${path.module}/state_machine.asl.json", {
+    job_clean_name              = var.job_clean_name
+    job_agg_name                = var.job_agg_name
+    crawler_name                = var.crawler_name
+    customer_sentiment_database = var.customer_sentiment_database
+    customer_sentiment_table    = var.customer_sentiment_table
+    athena_output_location      = local.athena_output_location
   })
-}
 
-# ---------------------------------------------------------------------------
-# Glue Catalog: external table over raw CSV with partition projection so
-# Athena can COUNT rows for a given dt without registering 235 partitions.
-# ---------------------------------------------------------------------------
-resource "aws_glue_catalog_database" "reviews_raw" {
-  name         = var.raw_database_name
-  description  = "Raw (bronze) layer database for ingested review CSV batches."
-  location_uri = local.raw_reviews_location
-}
-
-resource "aws_glue_catalog_table" "reviews" {
-  name          = var.raw_table_name
-  database_name = aws_glue_catalog_database.reviews_raw.name
-  table_type    = "EXTERNAL_TABLE"
-
-  parameters = {
-    "classification"                = "csv"
-    "skip.header.line.count"        = "1"
-    "projection.enabled"            = "true"
-    "projection.dt.type"            = "date"
-    "projection.dt.range"           = "2024-01-01,2024-12-31"
-    "projection.dt.format"          = "yyyy-MM-dd"
-    "storage.location.template"     = "${local.raw_reviews_location}dt=$${dt}/"
-  }
-
-  storage_descriptor {
-    location      = local.raw_reviews_location
-    input_format  = "org.apache.hadoop.mapred.TextInputFormat"
-    output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
-
-    ser_de_info {
-      name                  = "OpenCSVSerde"
-      serialization_library = "org.apache.hadoop.hive.serde2.OpenCSVSerde"
-      parameters = {
-        "separatorChar" = ","
-        "quoteChar"     = "\""
-        "escapeChar"    = "\\"
-      }
-    }
-
-    columns {
-      name = "clothing_id"
-      type = "int"
-    }
-    columns {
-      name = "age"
-      type = "int"
-    }
-    columns {
-      name = "title"
-      type = "string"
-    }
-    columns {
-      name = "review_text"
-      type = "string"
-    }
-    columns {
-      name = "rating"
-      type = "int"
-    }
-    columns {
-      name = "recommended_ind"
-      type = "int"
-    }
-    columns {
-      name = "division_name"
-      type = "string"
-    }
-    columns {
-      name = "department_name"
-      type = "string"
-    }
-    columns {
-      name = "class_name"
-      type = "string"
-    }
-  }
-
-  partition_keys {
-    name = "dt"
-    type = "string"
+  default_input = {
+    dt              = "YYYY-MM-DD"
+    bucket_raw      = var.raw_bucket_id
+    bucket_trusted  = var.trusted_bucket_id
+    bucket_product  = var.data_product_bucket_id
   }
 }
 
 # ---------------------------------------------------------------------------
-# Lake Formation: register raw location and grant the SFN role SELECT.
+# Lake Formation: grant SFN role access to validate customer_sentiment via Athena.
 # ---------------------------------------------------------------------------
-resource "aws_lakeformation_resource" "raw" {
-  arn                     = var.raw_bucket_arn
-  use_service_linked_role = true
-}
-
-resource "aws_lakeformation_permissions" "sfn_raw_location" {
-  principal   = var.sfn_role_arn
-  permissions = ["DATA_LOCATION_ACCESS"]
-
-  data_location {
-    arn = var.raw_bucket_arn
-  }
-
-  depends_on = [aws_lakeformation_resource.raw]
-}
-
-resource "aws_lakeformation_permissions" "sfn_raw_database" {
+resource "aws_lakeformation_permissions" "sfn_customer_database" {
   principal   = var.sfn_role_arn
   permissions = ["DESCRIBE"]
 
   database {
-    name = aws_glue_catalog_database.reviews_raw.name
+    name = var.customer_sentiment_database
   }
 }
 
-resource "aws_lakeformation_permissions" "sfn_raw_table" {
+resource "aws_lakeformation_permissions" "sfn_customer_tables" {
   principal   = var.sfn_role_arn
-  permissions = ["SELECT", "DESCRIBE"]
+  permissions = ["SELECT"]
 
   table {
-    database_name = aws_glue_catalog_database.reviews_raw.name
-    name          = aws_glue_catalog_table.reviews.name
+    database_name = var.customer_sentiment_database
+    wildcard      = true
+  }
+}
+
+resource "aws_lakeformation_permissions" "sfn_data_product_location" {
+  principal   = var.sfn_role_arn
+  permissions = ["DATA_LOCATION_ACCESS"]
+
+  data_location {
+    arn = var.data_product_bucket_arn
   }
 }
 
@@ -180,17 +92,17 @@ data "aws_iam_policy_document" "sfn_pipeline" {
   }
 
   statement {
-    sid       = "ReadRawBucket"
+    sid       = "ReadDataProductBucket"
     effect    = "Allow"
     actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
-    resources = [var.raw_bucket_arn]
+    resources = [var.data_product_bucket_arn]
   }
 
   statement {
-    sid       = "ReadRawObjects"
+    sid       = "ReadDataProductObjects"
     effect    = "Allow"
     actions   = ["s3:GetObject"]
-    resources = ["${var.raw_bucket_arn}/*"]
+    resources = ["${var.data_product_bucket_arn}/*"]
   }
 
   statement {
@@ -287,6 +199,6 @@ resource "aws_sfn_state_machine" "pipeline" {
   depends_on = [
     aws_iam_role_policy.sfn_pipeline,
     aws_cloudwatch_log_resource_policy.sfn,
-    aws_lakeformation_permissions.sfn_raw_table,
+    aws_lakeformation_permissions.sfn_customer_tables,
   ]
 }

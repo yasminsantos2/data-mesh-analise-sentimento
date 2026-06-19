@@ -34,17 +34,12 @@ variable "crawler_name" {
 }
 
 variable "raw_bucket_id" {
-  description = "Raw S3 bucket name."
-  type        = string
-}
-
-variable "raw_bucket_arn" {
-  description = "Raw S3 bucket ARN."
+  description = "Raw S3 bucket name (used in the default pipeline input)."
   type        = string
 }
 
 variable "trusted_bucket_id" {
-  description = "Trusted S3 bucket name."
+  description = "Trusted S3 bucket name (used in the default pipeline input)."
   type        = string
 }
 
@@ -58,27 +53,22 @@ variable "data_product_bucket_arn" {
   type        = string
 }
 
+variable "customer_sentiment_database" {
+  description = "Glue database validated by Athena at the end of the pipeline."
+  type        = string
+  default     = "customer_sentiment"
+}
+
+variable "customer_sentiment_table" {
+  description = "Glue table validated by Athena at the end of the pipeline."
+  type        = string
+  default     = "customer_sentiment_by_age"
+}
+
 variable "athena_results_prefix" {
   description = "Prefix inside the data-product bucket for Athena query results."
   type        = string
   default     = "athena-results"
-}
-
-variable "definition_source_path" {
-  description = "Path to the versioned state_machine.asl.json definition (Terraform template)."
-  type        = string
-}
-
-variable "raw_database_name" {
-  description = "Glue database used by Athena to count raw partition rows."
-  type        = string
-  default     = "reviews_raw"
-}
-
-variable "raw_table_name" {
-  description = "Glue table name for raw CSV reviews."
-  type        = string
-  default     = "reviews"
 }
 
 variable "tags" {

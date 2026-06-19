@@ -1,0 +1,289 @@
+{
+  "Comment": "S2-01 Pipeline diaria: job_clean -> job_agg -> crawler -> validacao Athena.",
+  "StartAt": "StartJobClean",
+  "States": {
+    "StartJobClean": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startJobRun",
+      "Parameters": {
+        "JobName": "${job_clean_name}",
+        "Arguments": {
+          "--dt.$": "$.dt",
+          "--bucket_raw.$": "$.bucket_raw",
+          "--bucket_trusted.$": "$.bucket_trusted"
+        }
+      },
+      "ResultPath": "$.jobCleanStart",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "JobCleanFailed"
+        }
+      ],
+      "Next": "WaitJobClean"
+    },
+    "WaitJobClean": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "GetJobCleanRun"
+    },
+    "GetJobCleanRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
+      "Parameters": {
+        "JobName": "${job_clean_name}",
+        "RunId.$": "$.jobCleanStart.JobRunId"
+      },
+      "ResultPath": "$.jobCleanRun",
+      "Next": "CheckJobClean"
+    },
+    "CheckJobClean": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.jobCleanRun.JobRun.JobRunState",
+          "StringEquals": "SUCCEEDED",
+          "Next": "StartJobAgg"
+        },
+        {
+          "Variable": "$.jobCleanRun.JobRun.JobRunState",
+          "StringEquals": "FAILED",
+          "Next": "JobCleanFailed"
+        },
+        {
+          "Variable": "$.jobCleanRun.JobRun.JobRunState",
+          "StringEquals": "STOPPED",
+          "Next": "JobCleanFailed"
+        },
+        {
+          "Variable": "$.jobCleanRun.JobRun.JobRunState",
+          "StringEquals": "TIMEOUT",
+          "Next": "JobCleanFailed"
+        }
+      ],
+      "Default": "WaitJobClean"
+    },
+    "JobCleanFailed": {
+      "Type": "Fail",
+      "Error": "JobCleanFailed",
+      "Cause": "job_clean did not complete successfully."
+    },
+    "StartJobAgg": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startJobRun",
+      "Parameters": {
+        "JobName": "${job_agg_name}",
+        "Arguments": {
+          "--dt.$": "$.dt",
+          "--bucket_trusted.$": "$.bucket_trusted",
+          "--bucket_product.$": "$.bucket_product"
+        }
+      },
+      "ResultPath": "$.jobAggStart",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "JobAggFailed"
+        }
+      ],
+      "Next": "WaitJobAgg"
+    },
+    "WaitJobAgg": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "GetJobAggRun"
+    },
+    "GetJobAggRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
+      "Parameters": {
+        "JobName": "${job_agg_name}",
+        "RunId.$": "$.jobAggStart.JobRunId"
+      },
+      "ResultPath": "$.jobAggRun",
+      "Next": "CheckJobAgg"
+    },
+    "CheckJobAgg": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.jobAggRun.JobRun.JobRunState",
+          "StringEquals": "SUCCEEDED",
+          "Next": "StartCrawler"
+        },
+        {
+          "Variable": "$.jobAggRun.JobRun.JobRunState",
+          "StringEquals": "FAILED",
+          "Next": "JobAggFailed"
+        },
+        {
+          "Variable": "$.jobAggRun.JobRun.JobRunState",
+          "StringEquals": "STOPPED",
+          "Next": "JobAggFailed"
+        },
+        {
+          "Variable": "$.jobAggRun.JobRun.JobRunState",
+          "StringEquals": "TIMEOUT",
+          "Next": "JobAggFailed"
+        }
+      ],
+      "Default": "WaitJobAgg"
+    },
+    "JobAggFailed": {
+      "Type": "Fail",
+      "Error": "JobAggFailed",
+      "Cause": "job_agg did not complete successfully."
+    },
+    "StartCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "${crawler_name}"
+      },
+      "ResultPath": null,
+      "Next": "WaitCrawler"
+    },
+    "WaitCrawler": {
+      "Type": "Wait",
+      "Seconds": 20,
+      "Next": "GetCrawlerStatus"
+    },
+    "GetCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "${crawler_name}"
+      },
+      "ResultPath": "$.crawlerStatus",
+      "Next": "CheckCrawler"
+    },
+    "CheckCrawler": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "READY",
+          "Next": "AthenaValidation"
+        },
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "RUNNING",
+          "Next": "WaitCrawler"
+        },
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "STOPPING",
+          "Next": "WaitCrawler"
+        }
+      ],
+      "Default": "CrawlerFailed"
+    },
+    "CrawlerFailed": {
+      "Type": "Fail",
+      "Error": "CrawlerFailed",
+      "Cause": "Crawler did not reach READY state."
+    },
+    "AthenaValidation": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:athena:startQueryExecution",
+      "Parameters": {
+        "QueryString.$": "States.Format('SELECT COUNT(*) AS total FROM ${customer_sentiment_database}.${customer_sentiment_table} WHERE dt = DATE \\'{}\\'', $.dt)",
+        "QueryExecutionContext": {
+          "Database": "${customer_sentiment_database}"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "${athena_output_location}"
+        },
+        "WorkGroup": "primary"
+      },
+      "ResultPath": "$.athenaValidation",
+      "Next": "WaitAthenaValidation"
+    },
+    "WaitAthenaValidation": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "GetAthenaValidationStatus"
+    },
+    "GetAthenaValidationStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:athena:getQueryExecution",
+      "Parameters": {
+        "QueryExecutionId.$": "$.athenaValidation.QueryExecutionId"
+      },
+      "ResultPath": "$.athenaStatus",
+      "Next": "CheckAthenaValidation"
+    },
+    "CheckAthenaValidation": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.athenaStatus.QueryExecution.Status.State",
+          "StringEquals": "SUCCEEDED",
+          "Next": "GetValidationCount"
+        },
+        {
+          "Variable": "$.athenaStatus.QueryExecution.Status.State",
+          "StringEquals": "FAILED",
+          "Next": "AthenaValidationFailed"
+        },
+        {
+          "Variable": "$.athenaStatus.QueryExecution.Status.State",
+          "StringEquals": "CANCELLED",
+          "Next": "AthenaValidationFailed"
+        }
+      ],
+      "Default": "WaitAthenaValidation"
+    },
+    "GetValidationCount": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:athena:getQueryResults",
+      "Parameters": {
+        "QueryExecutionId.$": "$.athenaValidation.QueryExecutionId"
+      },
+      "ResultPath": "$.validationCount",
+      "Next": "CheckCount"
+    },
+    "CheckCount": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.validationCount.ResultSet.Rows[1].Data[0].VarCharValue",
+          "StringEquals": "0",
+          "Next": "EmptyPartition"
+        }
+      ],
+      "Default": "Success"
+    },
+    "EmptyPartition": {
+      "Type": "Fail",
+      "Error": "EmptyPartition",
+      "Cause": "Athena validation returned COUNT=0 for the requested dt."
+    },
+    "AthenaValidationFailed": {
+      "Type": "Fail",
+      "Error": "AthenaValidationFailed",
+      "Cause": "Athena validation query did not succeed."
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  }
+}

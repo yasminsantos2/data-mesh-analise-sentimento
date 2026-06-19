@@ -73,3 +73,8 @@ output "state_machine_log_group" {
   description = "CloudWatch log group for Step Functions pipeline executions."
   value       = module.step_functions.log_group_name
 }
+
+output "pipeline_input_example" {
+  description = "Example input for the sentiment pipeline state machine."
+  value       = module.step_functions.default_pipeline_input
+}
