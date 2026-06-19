@@ -1,3 +1,6 @@
+# Copie para terraform.tfvars e ajuste se necessário:
+#   cp terraform.tfvars.example terraform.tfvars
+
 aws_region              = "us-east-1"
 project_name            = "data-mesh-sentimento"
 environment             = "dev"

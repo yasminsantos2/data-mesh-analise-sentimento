@@ -1,0 +1,2 @@
+# Diretório para CSVs sintéticos de teste (opcional).
+# Arquivos aqui podem ser versionados; o .gitignore ignora *.csv fora de fixtures/.

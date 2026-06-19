@@ -1,11 +1,21 @@
-# ---- Terraform ----
+# =============================================================================
+# Data Mesh — Análise de Sentimento
+# Arquivos que NÃO devem ser versionados (gerados, locais ou sensíveis).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Terraform — estado, cache e planos locais
+# -----------------------------------------------------------------------------
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+*.tfstate.backup
 crash.log
 crash.*.log
 *.tfplan
+**/*.tfplan
+**/tfplan
+**/plan.out
 override.tf
 override.tf.json
 *_override.tf
@@ -13,29 +23,123 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Local variable files that may contain secrets
+# Versionar: .terraform.lock.hcl (fixa versões dos providers)
+
+# -----------------------------------------------------------------------------
+# Terraform — variáveis por ambiente (usar *.tfvars.example como modelo)
+# -----------------------------------------------------------------------------
+*.tfvars
+!*.tfvars.example
 *.auto.tfvars
 *.tfvars.local
+secrets.tfvars
+*.secrets.tfvars
 
-# ---- Data ----
+# -----------------------------------------------------------------------------
+# Dados, logs e artefatos de pipeline (runtime)
+# -----------------------------------------------------------------------------
 data/
-
-# ---- Simulation logs ----
 logs/
+out/
+tmp/
+temp/
 
-# ---- Python ----
+# Exports locais (dataset, Athena, dumps)
+*.csv
+*.parquet
+*.orc
+*.avro
+*.jsonl
+!**/fixtures/**/*.csv
+!**/fixtures/**/*.json
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
+*$py.class
+.Python
 .venv/
 venv/
 env/
 .env
+.env.*
+!.env.example
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg
 *.egg-info/
+.eggs/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+dist/
+build/
+*.manifest
+*.spec
 
-# ---- IDE / OS ----
+# -----------------------------------------------------------------------------
+# Credenciais e segredos (nunca commitar)
+# -----------------------------------------------------------------------------
+.aws/
+credentials
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+*.secret
+id_rsa
+id_rsa.*
+known_hosts
+
+# -----------------------------------------------------------------------------
+# Backups e duplicatas de editor
+# -----------------------------------------------------------------------------
+* copy.*
+* copy.txt
+*.bak
+*.swp
+*.swo
+*.tmp
+*~
+\#*\#
+
+# -----------------------------------------------------------------------------
+# Jupyter / notebooks (se usados localmente)
+# -----------------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# -----------------------------------------------------------------------------
+# IDE e sistema operacional
+# -----------------------------------------------------------------------------
 .idea/
 .vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.cursor/
+*.sublime-project
+*.sublime-workspace
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# -----------------------------------------------------------------------------
+# Ferramentas opcionais
+# -----------------------------------------------------------------------------
+node_modules/
+.checkov/
+.scannerwork/

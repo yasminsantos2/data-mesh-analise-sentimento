@@ -73,6 +73,28 @@ data-mesh-analise-sentimento/
 | **Python** | 3.9+ (recomendado 3.10+) |
 | **Dependências** | `pip install -r requirements.txt` |
 
+### Configuração local (não versionada)
+
+Arquivos sensíveis ou específicos da máquina **não entram no git** (ver `.gitignore`):
+
+```bash
+# Variáveis Terraform do ambiente dev
+cp terraform/environments/dev/terraform.tfvars.example terraform/environments/dev/terraform.tfvars
+
+# Perfil AWS local (opcional)
+cp .env.example .env
+```
+
+| Artefato | Versionado? | Descrição |
+|---|---|---|
+| `terraform.tfvars.example` | Sim | Modelo de variáveis |
+| `terraform.tfvars` | **Não** | Valores do seu ambiente |
+| `.env.example` | Sim | Modelo de perfil AWS |
+| `.env` | **Não** | Credenciais/perfil local |
+| `data/` | **Não** | CSV do Kaggle |
+| `logs/` | **Não** | Saídas de simulação e E2E |
+| `.terraform.lock.hcl` | **Sim** | Lock de providers |
+
 Permissões AWS necessárias: S3, IAM, Glue, Lake Formation, Step Functions, Athena, CloudWatch Logs.
 
 ## Provisionamento Terraform (do zero)
@@ -93,6 +115,7 @@ Cria o bucket de state e a tabela DynamoDB de lock.
 
 ```bash
 cd terraform/environments/dev
+cp terraform.tfvars.example terraform.tfvars   # se ainda não existir
 terraform init
 terraform plan
 terraform apply

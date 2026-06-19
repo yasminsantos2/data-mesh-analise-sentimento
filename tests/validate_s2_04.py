@@ -125,7 +125,18 @@ def check_expected_max_dt() -> None:
 
 def check_gitignore() -> None:
     text = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
-    record("logs/ consta no .gitignore", "logs/" in text, "logs/")
+    checks = [
+        ("logs/ consta no .gitignore", "logs/" in text),
+        ("data/ consta no .gitignore", "data/" in text),
+        ("*.tfvars ignorado com excecao de example", "*.tfvars" in text and "!*.tfvars.example" in text),
+        (".env.example versionado existe", (REPO_ROOT / ".env.example").exists()),
+        (
+            "terraform.tfvars.example versionado existe",
+            (REPO_ROOT / "terraform/environments/dev/terraform.tfvars.example").exists(),
+        ),
+    ]
+    for name, ok in checks:
+        record(name, ok, "ok" if ok else "ausente")
 
 
 def check_readme() -> None:

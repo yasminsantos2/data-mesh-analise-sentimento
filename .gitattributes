@@ -1,0 +1,32 @@
+# Normaliza finais de linha e marca binários (importante em times Windows/macOS/Linux).
+* text=auto eol=lf
+
+# Terraform
+*.tf linguist-language=HCL
+*.tfvars linguist-language=HCL
+*.tfplan binary
+**/tfplan binary
+
+# Python
+*.py text eol=lf
+*.pyi text eol=lf
+
+# Shell / JSON / Markdown
+*.sh text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sql text eol=lf
+
+# Imagens e arquivos binários
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.parquet binary
+
+# CSV de dados (se existirem localmente em data/)
+*.csv binary
